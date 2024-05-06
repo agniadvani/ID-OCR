@@ -3,7 +3,6 @@ const sharp = require("sharp")
 const { createWorker } = require("tesseract.js")
 const getPixels = require("get-pixels")
 const { returnJsonError } = require("../error")
-const { extractCardDetails } = require('pan-aadhaar-ocr');
 
 exports.adhaarOcr = async (req, res) => {
     try {
