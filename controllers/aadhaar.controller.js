@@ -64,47 +64,40 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
         console.log("Metadata:", metadata)
         if (aadhaarType !== "Long") {
             const cropWidth = Math.round(metadata.width / 1.35);
-
+            const croppedPixels = metadata.width - cropWidth
             await image
                 .greyscale()
-                .extract({ left: 0, top: 0, width: cropWidth, height: metadata.height })
+                .extract({ left: croppedPixels, top: 0, width: cropWidth - croppedPixels, height: metadata.height })
                 .toFile("./uploads/grayimage.png");
         } else {
-            const cropHeight = Math.round(metadata.height / 1.35);
+            const cropHeight = Math.round(metadata.height / 2.5);
+            const cropWidth = Math.round(metadata.width / 1.35);
+            const croppedPixels = metadata.width - cropWidth
 
             await image
                 .greyscale()
-                .toFile("./uploads/grayimage.png");
-            await image
-                .greyscale()
-                .toFile("./uploads/grayimage.png");
+                .extract({ left: croppedPixels, top: metadata.height - cropHeight, width: cropWidth - croppedPixels, height: cropHeight })
+                .toFile("./uploads/grayimage.png")
         }
 
-
-
         let count = 0
-        let aadhaarNumber
-        let dob
-        let aadhaarNumberMatch
-        let yob
-        let gender
-        let name
+        let aadhaarNumber, dob, aadhaarNumberMatch, yob, gender, name
 
-        // (!aadhaarNumberMatch || (!dob && !yob) || !gender) &&
-        while ((!aadhaarNumberMatch || (!dob && !yob) || !gender) && count < 15) {
+        while ((!aadhaarNumberMatch || !aadhaarNumber || (!dob && !yob) || !gender) && count < 15) {
             console.log("Try", count + 1)
             const threshold = aadhaarType ? 10 * count : 20 * count
             image = image.threshold(threshold)
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-            let { extractedText, confidence } = await performAadhaarOcr(image);
+            let { extractedText } = await performAadhaarOcr(image);
             console.log("extractedText:", extractedText)
             const aadhaarRegex = /([2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4})/;
             const extractedArray = extractedText.split("\n")
             console.log("Treshold", extractedArray)
             if (!aadhaarNumberMatch) {
-                if (!aadhaarNumberMatch) {
-                    aadhaarNumberMatch = extractedText.match(aadhaarRegex);
-                }
+                aadhaarNumberMatch = String(extractedText).match(aadhaarRegex);
+            }
+            if (aadhaarNumberMatch && !aadhaarNumber) {
+                aadhaarNumber = aadhaarNumberMatch[0]
             }
 
             if (!dob || !yob) {
@@ -117,29 +110,42 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
             gender = gender ? gender : extractedText.toLowerCase().includes("male") ? "Male" : extractedText.toLowerCase().includes("female") ? "Female" : ""
 
             console.log(extractedArray)
-            console.log({ aadhaarNumber, dob, yob, name })
+            console.log({ aadhaarNumber, dob, yob, name, gender })
 
             count++
         }
 
+
         console.log("Got adhaar number, dob, yob, gender... now getting name")
-        const resolution = metadata.height * metadata.width
-        console.log("Image Resolution:", resolution)
-        image = image.threshold(100)
-        fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-        let { extractedText, confidence } = await performAadhaarOcr(image);
-        console.log("extractedTextforname:", extractedText.split("\n"))
+        count = 0
 
-        if (aadhaarNumberMatch) {
-            aadhaarNumber = aadhaarNumberMatch[0];
-            if (dob)
-                return { aadhaarNumber, dob, gender, name };
-            else
-                return { aadhaarNumber, yob, gender, name }
+        let nameMatch
+        while (!name && count <= 10) {
+            const resolution = metadata.height * metadata.width
+            console.log("Image Resolution:", resolution)
+            fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
+            const threshold = count * 25
+            image = image.threshold(threshold)
+            let { extractedText } = await performAadhaarOcr(image);
+            console.log("extractedTextforname:", extractedText.split("\n").filter(item => item !== ""))
+            fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
+            let govtIndex
+            extractedText.split("\n").filter(item => item !== "").forEach((element, i) => {
+                if (element.includes("Government")) {
+                    govtIndex = i
+                }
+            });
 
-        } else {
-            return null
+
+            name = cleanString(extractedText.split("\n").filter(item => item !== "")[govtIndex + 2] || "")
+            count++
         }
+
+        if (dob)
+            return { aadhaarNumber, dob, gender, name }
+        else
+            return { aadhaarNumber, yob, gender, name }
+
 
     } catch (error) {
         console.error('Error extracting Addhaar details:', error);
@@ -160,9 +166,6 @@ function extractYearOfBirthFromText(ocrText) {
     }
 }
 
-
-
-
 function isImageBlurry(imagePath) {
     return new Promise((resolve, reject) => {
         getPixels(imagePath, (err, pixels) => {
@@ -173,4 +176,9 @@ function isImageBlurry(imagePath) {
             resolve(pixels.shape.slice()[0] <= 500)
         })
     })
+}
+
+function cleanString(str) {
+    return str.replace(/[^a-zA-Z\s]/g, '').trim();
+
 }
