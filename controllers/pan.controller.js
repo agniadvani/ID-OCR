@@ -1,20 +1,14 @@
 const fs = require("fs")
 const sharp = require("sharp")
 const { createWorker } = require("tesseract.js")
-const getPixels = require("get-pixels")
 const { returnJsonError } = require("../error")
+const { cleanString, isImageBlurry, deleteAllUploadedFiles } = require("../utils/utils")
 
 
 exports.panOcr = async (req, res) => {
     try {
-        if (!req.file) {
-            return returnJsonError(res, 400, "Please Upload Image")
-        }
         const imagePath = `./uploads/${req.file.originalname}`
-        if (await isImageBlurry(imagePath)) {
-            console.log("Image is blurry")
-            return returnJsonError(res, 400, "Image is too blurry, upload a higher quality image.")
-        }
+
         const { panNumber, dob } = await extractPANNumberAndDob(imagePath)
         const { name, fatherName } = await extractNameAndFatherNameFromPan(imagePath)
 
@@ -23,9 +17,7 @@ exports.panOcr = async (req, res) => {
         console.log(err)
         return returnJsonError(res, 500, err.message)
     } finally {
-        fs.readdirSync("./uploads").forEach(item => {
-            fs.rmSync(`./uploads/${item}`)
-        })
+        deleteAllUploadedFiles()
     }
 }
 
@@ -46,10 +38,7 @@ async function extractPANNumberAndDob(imagePath) {
 
         let image = sharp(imagePath).resize({ fit: "inside", height: 800 }).grayscale()
         fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-
         const metadata = await image.metadata()
-
-
         let panNumberMatch
         let dob
 
@@ -182,7 +171,7 @@ function extractNameAndFatherName(textArray, name, fatherName) {
     })
 
     textArray.forEach((item, i) => {
-        if (item.includes("Father's Name")) {
+        if (item.includes("Father's Nam")) {
             fatherIndex = i + 1
             return
         }
@@ -191,21 +180,4 @@ function extractNameAndFatherName(textArray, name, fatherName) {
     name = nameIndex > -1 ? textArray[nameIndex] : ""
     fatherName = fatherIndex > -1 ? textArray[fatherIndex] : ""
     return { name, fatherName }
-}
-
-function cleanString(str) {
-    return str.replace(/[^a-zA-Z\s]/g, '').trim();
-
-}
-
-function isImageBlurry(imagePath) {
-    return new Promise((resolve, reject) => {
-        getPixels(imagePath, (err, pixels) => {
-            if (err) {
-                console.log("Bad image path")
-                reject(err)
-            }
-            resolve(pixels.shape.slice()[0] <= 600)
-        })
-    })
 }

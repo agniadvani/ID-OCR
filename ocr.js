@@ -3,6 +3,7 @@ const app = express()
 const multer = require("multer")
 const { panOcr } = require("./controllers/pan.controller")
 const { adhaarOcr } = require("./controllers/aadhaar.controller")
+const { blurryImageFilter } = require("./middlewares/middleware")
 
 
 const storage = multer.diskStorage({
@@ -19,8 +20,8 @@ const upload = multer({ storage: storage }).single('document')
 app.use(upload)
 app.use(express.json())
 
-app.post("/ocr/pan", panOcr)
-app.post("/ocr/aadhaar", adhaarOcr)
+app.post("/ocr/pan", blurryImageFilter, panOcr)
+app.post("/ocr/aadhaar", blurryImageFilter, adhaarOcr)
 
 const PORT = 8888
 app.listen(PORT, () => {
