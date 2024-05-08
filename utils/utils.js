@@ -25,3 +25,7 @@ exports.deleteAllUploadedFiles = () => {
         fs.rmSync(`./uploads/${item}`)
     })
 }
+
+exports.returnResponseJson = (res, status, data) => {
+    return res.status(status).json({ success: true, status: status, data: data })
+}

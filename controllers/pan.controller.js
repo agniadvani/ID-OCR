@@ -2,7 +2,7 @@ const fs = require("fs")
 const sharp = require("sharp")
 const { createWorker } = require("tesseract.js")
 const { returnJsonError } = require("../error")
-const { cleanString, isImageBlurry, deleteAllUploadedFiles } = require("../utils/utils")
+const { cleanString, isImageBlurry, deleteAllUploadedFiles, returnResponseJson } = require("../utils/utils")
 
 
 exports.panOcr = async (req, res) => {
@@ -12,7 +12,7 @@ exports.panOcr = async (req, res) => {
         const { panNumber, dob } = await extractPANNumberAndDob(imagePath)
         const { name, fatherName } = await extractNameAndFatherNameFromPan(imagePath)
 
-        res.send({ success: true, status: 200, data: { panNumber, dob, name, fatherName } })
+        return returnResponseJson(res, 200, { panNumber, dob, name, fatherName })
     } catch (err) {
         console.log(err)
         return returnJsonError(res, 500, err.message)

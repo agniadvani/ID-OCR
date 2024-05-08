@@ -2,7 +2,7 @@ const fs = require("fs")
 const sharp = require("sharp")
 const { createWorker } = require("tesseract.js")
 const { returnJsonError } = require("../error")
-const { cleanString, isImageBlurry, deleteAllUploadedFiles } = require("../utils/utils")
+const { cleanString, isImageBlurry, deleteAllUploadedFiles, returnResponseJson } = require("../utils/utils")
 
 exports.adhaarOcr = async (req, res) => {
     try {
@@ -20,8 +20,7 @@ exports.adhaarOcr = async (req, res) => {
             console.log("Long ID")
             aadhaarData = await extractAadhaarNumberDobAndGenderForSmallIds(imagePath, "Long")
         }
-
-        res.send({ success: true, status: 200, data: aadhaarData })
+        return returnResponseJson(res, 200, aadhaarData)
     } catch (err) {
         console.log(err)
         return returnJsonError(res, 500, err.message)
