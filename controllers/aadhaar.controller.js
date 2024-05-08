@@ -2,7 +2,8 @@ const fs = require("fs")
 const sharp = require("sharp")
 const { createWorker } = require("tesseract.js")
 const { returnJsonError } = require("../error")
-const { cleanString, isImageBlurry, deleteAllUploadedFiles, returnResponseJson } = require("../utils/utils")
+const { cleanString, deleteAllUploadedFiles, returnResponseJson, performOcr } = require("../utils/utils")
+const getPixels = require("get-pixels")
 
 exports.adhaarOcr = async (req, res) => {
     try {
@@ -30,23 +31,16 @@ exports.adhaarOcr = async (req, res) => {
 }
 
 
-async function performAadhaarOcr(image) {
-    try {
-        const worker = await createWorker(['eng']);
-        const { data: { text, confidence } } = await worker.recognize(await image.toBuffer());
-        await worker.terminate();
-        return { extractedText: text.trim(), confidence: confidence };
-    } catch (err) {
-        console.log(err)
-        return null
-    }
-}
-
 async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarType) {
     try {
-
         let image = sharp(imagePath).grayscale()
         fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
+
+        if (await isImageBlurry(imagePath)) {
+            console.log("Image too blurry")
+            return null
+        }
+
         const metadata = await image.metadata()
         console.log("Metadata:", metadata)
         if (aadhaarType !== "Long") {
@@ -75,7 +69,7 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
             const threshold = aadhaarType ? 10 * count : 20 * count
             image = image.threshold(threshold)
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-            let { extractedText } = await performAadhaarOcr(image);
+            let { extractedText } = await performOcr(image);
             console.log("extractedText:", extractedText)
             const aadhaarRegex = /([2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4})/;
             const extractedArray = extractedText.split("\n")
@@ -113,7 +107,7 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
             const threshold = count * 25
             image = image.threshold(threshold)
-            let { extractedText } = await performAadhaarOcr(image);
+            let { extractedText } = await performOcr(image);
             console.log("extractedTextforname:", extractedText.split("\n").filter(item => item !== ""))
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
             let govtIndex
@@ -153,3 +147,14 @@ function extractYearOfBirthFromText(ocrText) {
     }
 }
 
+function isImageBlurry(imagePath) {
+    return new Promise((resolve, reject) => {
+        getPixels(imagePath, (err, pixels) => {
+            if (err) {
+                console.log("Bad image path")
+                reject(err)
+            }
+            resolve(pixels.shape.slice()[0] <= 600)
+        })
+    })
+}

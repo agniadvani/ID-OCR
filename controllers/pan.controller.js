@@ -1,8 +1,8 @@
 const fs = require("fs")
 const sharp = require("sharp")
-const { createWorker } = require("tesseract.js")
 const { returnJsonError } = require("../error")
-const { cleanString, isImageBlurry, deleteAllUploadedFiles, returnResponseJson } = require("../utils/utils")
+const { cleanString, deleteAllUploadedFiles, returnResponseJson, performOcr } = require("../utils/utils")
+const getPixels = require("get-pixels")
 
 
 exports.panOcr = async (req, res) => {
@@ -21,24 +21,18 @@ exports.panOcr = async (req, res) => {
     }
 }
 
-async function performPanNumberOcr(image) {
-    try {
-        const worker = await createWorker(['eng']);
-        const { data: { text, confidence } } = await worker.recognize(await image.toBuffer());
-        await worker.terminate();
-        return { extractedText: text.trim(), confidence: confidence };
-    } catch (err) {
-        console.log(err)
-        return null
-    }
-}
+
 
 async function extractPANNumberAndDob(imagePath) {
     try {
 
         let image = sharp(imagePath).resize({ fit: "inside", height: 800 }).grayscale()
         fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-        const metadata = await image.metadata()
+
+        if (await isImageBlurry(imagePath)) {
+            console.log("Image too blurry")
+            return null
+        }
         let panNumberMatch
         let dob
 
@@ -48,7 +42,7 @@ async function extractPANNumberAndDob(imagePath) {
             const threshold = 35 * count
             image = image.threshold(threshold)
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-            const { extractedText } = await performPanNumberOcr(image);
+            const { extractedText } = await performOcr(image);
             console.log("extractedText:", extractedText)
 
             const panRegex = /[A-Z]{5}[0-9]{4}[A-Z]{1}/;
@@ -98,7 +92,7 @@ async function extractNameAndFatherNameFromPan(imagePath) {
             const threshold = 15 * count
             image = image.threshold(threshold)
             fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-            const { extractedText, confidence } = await performPanNumberOcr(image);
+            const { extractedText, confidence } = await performOcr(image);
             console.log("confidence:", confidence, "extractedText:", extractedText.split("\n"))
 
             const extractedNames = extractNameAndFatherName(extractedText.split("\n"))
@@ -127,7 +121,7 @@ async function extractNameAndFatherNameFromPan(imagePath) {
                 const threshold = 15 * count
                 image = image.threshold(threshold)
                 fs.writeFileSync("./uploads/grayimage.png", await image.toBuffer(), { encoding: "binary" })
-                const { extractedText, confidence } = await performPanNumberOcr(image);
+                const { extractedText, confidence } = await performOcr(image);
                 console.log("Confidence:", confidence)
                 if (confidence >= 50) {
                     const extractedTextArray = extractedText.split("\n").filter(item => item !== '')
@@ -180,4 +174,15 @@ function extractNameAndFatherName(textArray, name, fatherName) {
     name = nameIndex > -1 ? textArray[nameIndex] : ""
     fatherName = fatherIndex > -1 ? textArray[fatherIndex] : ""
     return { name, fatherName }
+}
+function isImageBlurry(imagePath) {
+    return new Promise((resolve, reject) => {
+        getPixels(imagePath, (err, pixels) => {
+            if (err) {
+                console.log("Bad image path")
+                reject(err)
+            }
+            resolve(pixels.shape.slice()[0] <= 600)
+        })
+    })
 }
