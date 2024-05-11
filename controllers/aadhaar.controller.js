@@ -100,7 +100,6 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
         console.log("Got adhaar number, dob, yob, gender... now getting name")
         count = 0
 
-        let nameMatch
         while (!name && count <= 10) {
             const resolution = metadata.height * metadata.width
             console.log("Image Resolution:", resolution)
@@ -116,7 +115,6 @@ async function extractAadhaarNumberDobAndGenderForSmallIds(imagePath, aadhaarTyp
                     govtIndex = i
                 }
             });
-
 
             name = cleanString(extractedText.split("\n").filter(item => item !== "")[govtIndex + 2] || "")
             count++
